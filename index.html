@@ -650,7 +650,7 @@ function offline(q){for(const[r,t]of OFF)if(r.test(q))return t;return "Sorry, my
 const fetchT=(u,o,ms)=>{const c=new AbortController(),t=setTimeout(()=>c.abort(),ms);return fetch(u,{...o,signal:c.signal}).finally(()=>clearTimeout(t))};
 let geminiOff=(()=>{try{return sessionStorage.getItem('skg')==='off'}catch(e){return false}})();
 async function viaProxy(msgs){const r=await fetchT(AGENT_API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system:SYS,messages:msgs})},30000);if(!r.ok)throw new Error('proxy '+r.status);const j=await r.json();if(!j.reply)throw new Error('empty');return String(j.reply)}
-async function viaGemini(msgs,onTok){if(geminiOff||!window.loadFirebase)throw new Error('off');await window.loadFirebase();try{return await window.skGemini(SYS,msgs,onTok)}catch(e){console.info('SK Agent: Gemini (Firebase AI Logic) not available, using fallback.',e&&e.message);geminiOff=true;try{sessionStorage.setItem('skg','off')}catch(_){}throw e}}
+async function viaGemini(msgs,onTok){if(geminiOff||!window.loadFirebase)throw new Error('off');await window.loadFirebase();try{return await window.skGemini(SYS,msgs,onTok)}catch(e){const msg=String(e&&e.message);console.info('SK Agent: Gemini unavailable, using fallback.',msg);if(/api-not-enabled|permission|403|forbidden/i.test(msg)){geminiOff=true;try{sessionStorage.setItem('skg','off')}catch(_){}}throw e}}
 async function viaFree(msgs){
  for(const u of['https://gen.pollinations.ai/v1/chat/completions','https://text.pollinations.ai/openai']){try{const r=await fetchT(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'openai',private:true,messages:[{role:'system',content:SYS},...msgs]})},35000);
   if(r.ok){const j=await r.json(),t=j&&j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content;if(t&&t.trim())return t.trim()}}catch(e){}}
@@ -842,12 +842,13 @@ window.skGemini=async(sys,msgs,onTok)=>{
  /* model names change over time: try the "latest" alias first, then newer/older names; remember the one that works */
  let last;for(let i=MI;i<MODELS.length;i++){let t="";
   try{const chat=m.getGenerativeModel(ai,{model:MODELS[i],systemInstruction:sys}).startChat({history:hist});
-   const res=await Promise.race([chat.sendMessageStream(msgs[msgs.length-1].content),new Promise((_,j)=>setTimeout(()=>j(new Error("timeout")),25000))]);
+   const res=await Promise.race([chat.sendMessageStream(msgs[msgs.length-1].content),new Promise((_,j)=>setTimeout(()=>j(new Error("timeout")),15000))]);
    for await(const c of res.stream){t+=c.text();onTok(t)}
    if(t.trim()){MI=i;return t}throw new Error("empty")}
-  catch(e){last=e;if(t||!/404|not found|no longer available|not supported/i.test(String(e&&e.message)))throw e}}
+  catch(e){last=e;if(t||!/timeout|empty|404|429|500|503|not found|no longer available|not supported|overloaded|unavailable/i.test(String(e&&e.message)))throw e}}
  throw last};
-const MODELS=["gemini-flash-latest","gemini-3.8-flash","gemini-3-flash","gemini-2.5-flash-lite"];let MI=0;
+/* lite model answers in ~1s on the free tier; the bigger flash model is a backup */
+const MODELS=["gemini-flash-lite-latest","gemini-flash-latest"];let MI=0;
 /* Analytics after the page is idle */
 const idle=window.requestIdleCallback||(f=>setTimeout(f,2500));
 addEventListener("load",()=>idle(()=>getApp().then(async app=>{const{getAnalytics,isSupported}=await import(CDN+"firebase-analytics.js");if(await isSupported())getAnalytics(app)}).catch(()=>{}),{timeout:6000}));
