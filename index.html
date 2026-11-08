@@ -329,6 +329,7 @@ h1 .g{filter:drop-shadow(0 0 16px rgba(34,211,238,.35))}[data-theme="light"] h1 
 [data-theme="light"] .skm pre{background:#eceffa;color:#22283f}
 .skm a.ln{color:var(--b);text-decoration:underline}
 .skm h4{font:700 14px Sora,sans-serif;margin:6px 0 4px}
+.skm .tbl{overflow-x:auto;margin:6px 0}.skm table{border-collapse:collapse;font-size:13px;min-width:100%}.skm th,.skm td{border:1px solid var(--line);padding:5px 8px;text-align:start;vertical-align:top}.skm th{background:rgba(124,108,255,.15)}
 .skclr{width:34px;height:34px;border-radius:10px;border:1px solid var(--line);background:var(--glass);color:var(--mut);cursor:pointer;font-size:14px}.skclr:hover{border-color:var(--b);color:var(--tx)}
 .skmeta{font-size:11px;color:var(--mut);text-align:center;padding:0 12px 8px}
 #ski{resize:none;max-height:120px;line-height:1.4}
@@ -602,7 +603,7 @@ HOW TO BEHAVE
 - When the visitor asks about Shahzaib (who he is, his skills, services, projects, experience, contact, hiring), answer from the PROFILE below. Speak about him warmly and professionally, in third person.
 - Never invent personal facts that are not in the PROFILE (age, address, education, salary, prices, family, clients). If asked, say you don't have that detail and suggest contacting him directly.
 - If the visitor needs a website, web app, AI tool, automation, design or SEO work, recommend Shahzaib and tell them to use the "Hire Me" form or WhatsApp.
-- Language: reply in the same language and style as the visitor: English, Urdu or Roman Urdu.
+- Language: mirror the visitor's script exactly. English question: reply in English. Roman Urdu (Urdu written in English letters, e.g. "kaise karte hain"): reply in Roman Urdu, NOT in Urdu script. Urdu script: reply in Urdu script.
 - Format with concise Markdown: short paragraphs, bullet lists, **bold** for key points, fenced code blocks for code. Be direct, no filler. Keep normal answers under about 200 words unless the visitor asks for detail or code.
 - If asked who built you: Shahzaib Arshad Khagga built SK Agent.
 
@@ -663,14 +664,17 @@ function md(src){
  const inl=t=>esc(t).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/(^|[^*\w])\*([^*\n]+)\*(?!\w)/g,'$1<i>$2</i>')
   .replace(/\[([^\]]+)\]\(((?:https?:\/\/|mailto:)[^\s)]+)\)/g,(_,t,u)=>lnk(u,t)).replace(/(^|[\s(])(https?:\/\/[^\s<)]+[^\s<).,!?])/g,(_,p,u)=>p+lnk(u,u));
  const out=[];let list=null;const close=()=>{if(list){out.push('</'+list+'>');list=null}};
+ let tb=null;const endT=()=>{if(tb){out.push('<div class="tbl"><table>'+tb.join('')+'</table></div>');tb=null}};
  for(const raw of src.split('\n')){const l=raw.trimEnd();let m;
+  if(/^\s*\|.*\|\s*$/.test(l)){close();if(/^\s*\|[\s:|-]+\|\s*$/.test(l))continue;const cells=l.trim().slice(1,-1).split('|').map(c=>inl(c.trim()));const tag=tb?'td':'th';(tb=tb||[]).push('<tr>'+cells.map(c=>'<'+tag+'>'+c+'</'+tag+'>').join('')+'</tr>');continue}
+  endT();
   if(m=l.match(/^\s*[-*•]\s+(.*)/)){if(list!=='ul'){close();out.push('<ul>');list='ul'}out.push('<li>'+inl(m[1])+'</li>');continue}
   if(m=l.match(/^\s*\d+[.)]\s+(.*)/)){if(list!=='ol'){close();out.push('<ol>');list='ol'}out.push('<li>'+inl(m[1])+'</li>');continue}
   close();if(!l.trim())continue;
   if(m=l.match(/^#{1,6}\s+(.*)/)){out.push('<h4>'+inl(m[1])+'</h4>');continue}
   if(/^\u0000\d+\u0000$/.test(l.trim())){out.push(l.trim());continue}
   out.push('<p>'+inl(l)+'</p>')}
- close();return out.join('').replace(/\u0000(\d+)\u0000/g,(_,i)=>B[+i])}
+ close();endT();return out.join('').replace(/\u0000(\d+)\u0000/g,(_,i)=>B[+i])}
 
 function bubble(who){const d=document.createElement('div');d.className='skm '+who;skm.appendChild(d);return d}
 function addActs(d,o){if(!o.links.length&&!o.acts.length)return;const a=document.createElement('div');a.className='acts';
@@ -831,15 +835,19 @@ window.saveMessage=async d=>{const app=await getApp();const{getFirestore,collect
 /* SK Agent brain: Google Gemini through Firebase AI Logic (Firebase console > AI Logic > Get started > Gemini Developer API). Streams tokens. */
 let modelP=null;
 window.skGemini=async(sys,msgs,onTok)=>{
- if(!modelP)modelP=(async()=>{const app=await getApp();const{getAI,getGenerativeModel,GoogleAIBackend}=await import(CDN+"firebase-ai.js");
-  return getGenerativeModel(getAI(app,{backend:new GoogleAIBackend()}),{model:"gemini-2.5-flash",systemInstruction:sys})})();
- const model=await modelP;
- const hist=msgs.slice(0,-1).map(m=>({role:m.role==="assistant"?"model":"user",parts:[{text:m.content}]}));
+ if(!modelP)modelP=(async()=>{const app=await getApp();const m=await import(CDN+"firebase-ai.js");return{m,ai:m.getAI(app,{backend:new m.GoogleAIBackend()})}})();
+ const{m,ai}=await modelP;
+ const hist=msgs.slice(0,-1).map(x=>({role:x.role==="assistant"?"model":"user",parts:[{text:x.content}]}));
  while(hist.length&&hist[0].role!=="user")hist.shift();
- const chat=model.startChat({history:hist});
- const res=await Promise.race([chat.sendMessageStream(msgs[msgs.length-1].content),new Promise((_,j)=>setTimeout(()=>j(new Error("timeout")),20000))]);
- let t="";for await(const c of res.stream){t+=c.text();onTok(t)}
- if(!t.trim())throw new Error("empty");return t};
+ /* model names change over time: try the "latest" alias first, then newer/older names; remember the one that works */
+ let last;for(let i=MI;i<MODELS.length;i++){let t="";
+  try{const chat=m.getGenerativeModel(ai,{model:MODELS[i],systemInstruction:sys}).startChat({history:hist});
+   const res=await Promise.race([chat.sendMessageStream(msgs[msgs.length-1].content),new Promise((_,j)=>setTimeout(()=>j(new Error("timeout")),25000))]);
+   for await(const c of res.stream){t+=c.text();onTok(t)}
+   if(t.trim()){MI=i;return t}throw new Error("empty")}
+  catch(e){last=e;if(t||!/404|not found|no longer available|not supported/i.test(String(e&&e.message)))throw e}}
+ throw last};
+const MODELS=["gemini-flash-latest","gemini-3.8-flash","gemini-3-flash","gemini-2.5-flash-lite"];let MI=0;
 /* Analytics after the page is idle */
 const idle=window.requestIdleCallback||(f=>setTimeout(f,2500));
 addEventListener("load",()=>idle(()=>getApp().then(async app=>{const{getAnalytics,isSupported}=await import(CDN+"firebase-analytics.js");if(await isSupported())getAnalytics(app)}).catch(()=>{}),{timeout:6000}));
