@@ -817,7 +817,11 @@ let vis=true;document.addEventListener('visibilitychange',()=>vis=!document.hidd
 const V="12.6.0",CDN="https://www.gstatic.com/firebasejs/"+V+"/";
 const CFG={apiKey:"AIzaSyCxQU_A0DxThmxCkYbuEqLuQFX9Mr4Wp_4",authDomain:"shahzaib-arshad-khagga.firebaseapp.com",projectId:"shahzaib-arshad-khagga",storageBucket:"shahzaib-arshad-khagga.firebasestorage.app",messagingSenderId:"489440223236",appId:"1:489440223236:web:98b3aa4c2021a8e80c5551",measurementId:"G-RQPE86XQ39"};
 let appP=null;
-const getApp=()=>appP||(appP=import(CDN+"firebase-app.js").then(m=>m.initializeApp(CFG)));
+/* App Check (reCAPTCHA Enterprise / Fraud Defense) protects the Gemini quota from abuse by other sites */
+const RECAPTCHA_SITE_KEY="6LebuhYuAAAAAMPofgIUO6US_dSWUGdHYrIz5msK";
+const getApp=()=>appP||(appP=(async()=>{const{initializeApp}=await import(CDN+"firebase-app.js");const app=initializeApp(CFG);
+ try{const{initializeAppCheck,ReCaptchaEnterpriseProvider}=await import(CDN+"firebase-app-check.js");initializeAppCheck(app,{provider:new ReCaptchaEnterpriseProvider(RECAPTCHA_SITE_KEY),isTokenAutoRefreshEnabled:true})}catch(e){console.warn("App Check init failed",e)}
+ return app})());
 window.loadFirebase=()=>getApp();
 /* Contact form: one atomic write: (1) message -> "messages"; (2) mail request -> "mail" (sent by the "Trigger Email from Firestore" extension) */
 window.saveMessage=async d=>{const app=await getApp();const{getFirestore,collection,doc,writeBatch,serverTimestamp}=await import(CDN+"firebase-firestore.js");const db=getFirestore(app);const b=writeBatch(db);
