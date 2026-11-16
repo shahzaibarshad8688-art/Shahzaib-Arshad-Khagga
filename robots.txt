@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://shahzaibarshad8688-art.github.io/Shahzaib-Arshad-Khagga/sitemap.xml
